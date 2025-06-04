@@ -11,6 +11,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
+      with:
+        submodules: false  # We'll fetch submodules manually with retries
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -35,6 +37,23 @@ jobs:
         yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk --licenses
         $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk "platform-tools" "platforms;android-33" "build-tools;34.0.0" "ndk;27.2.12479018"
 
+    - name: Configure git to avoid timeout issues
+      run: |
+        git config --global http.postBuffer 524288000
+        git config --global http.lowSpeedLimit 0
+        git config --global http.lowSpeedTime 999999
+
+    - name: Initialize and update git submodules with retries
+      run: |
+        attempts=0
+        until [ $attempts -ge 3 ]
+        do
+          git submodule update --init --recursive && break
+          attempts=$((attempts+1))
+          echo "Retrying submodule update ($attempts)..."
+          sleep 5
+        done
+
     - name: Build APK
       env:
         ANDROIDSDK: $HOME/android-sdk
@@ -42,7 +61,6 @@ jobs:
         ANDROIDAPI: 33
         ANDROIDMINAPI: 21
       run: buildozer -v android debug
-
 
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
