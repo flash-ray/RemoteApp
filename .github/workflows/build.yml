@@ -11,8 +11,6 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-      with:
-        submodules: false
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -22,11 +20,24 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt update
-        sudo apt install -y libncurses6 unzip zip openjdk-17-jdk \
-          python3-pip python3-setuptools python3-wheel python3-dev git \
-          autoconf libtool pkg-config
+        sudo apt install -y libncurses6 unzip zip openjdk-17-jdk python3-pip python3-setuptools python3-wheel python3-dev git autoconf libtool pkg-config
         pip install --upgrade pip
         pip install buildozer cython
+
+    - name: Validate Buildozer installation
+      run: |
+        buildozer --version
+        python3 -m pip show buildozer
+
+    - name: Ensure Buildozer directories exist
+      run: |
+        mkdir -p $GITHUB_WORKSPACE/.buildozer/android/platform/python-for-android
+
+    - name: Debug Buildozer environment
+      run: |
+        ls -al $GITHUB_WORKSPACE/.buildozer/android/platform/
+        echo "Buildozer spec file content:"
+        cat $GITHUB_WORKSPACE/buildozer.spec || echo "buildozer.spec file not found!"
 
     - name: Install Android SDK, Build-tools, NDK, and accept licenses
       run: |
@@ -37,30 +48,7 @@ jobs:
         mkdir -p cmdline-tools/latest
         mv cmdline-tools-temp/cmdline-tools/* cmdline-tools/latest/
         yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk --licenses
-        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk \
-          "platform-tools" "platforms;android-33" "build-tools;34.0.0" "ndk;27.2.12479018"
-
-    - name: Configure git and fetch submodules with retry
-      run: |
-        git config --global http.postBuffer 524288000
-        git config --global http.lowSpeedLimit 0
-        git config --global http.lowSpeedTime 999999
-        attempts=0
-        until [ $attempts -ge 3 ]
-        do
-          git submodule update --init --recursive && break
-          attempts=$((attempts+1))
-          echo "Retrying submodule update ($attempts)..."
-          sleep 5
-        done
-
-    - name: Prepare environment for autoreconf (if needed)
-      run: |
-        if [ -f configure.ac ]; then
-          echo "Running autoupdate and autoreconf..."
-          autoupdate || true
-          autoreconf -i || true
-        fi
+        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk "platform-tools" "platforms;android-33" "build-tools;34.0.0" "ndk;27.2.12479018"
 
     - name: Build APK
       env:
@@ -69,7 +57,6 @@ jobs:
         ANDROIDAPI: 33
         ANDROIDMINAPI: 21
       run: |
-        buildozer android clean
         buildozer -v android debug
 
     - name: Upload APK artifact
